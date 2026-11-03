@@ -19,8 +19,12 @@ Código fuente en este repositorio; instrucciones para compilar más abajo.
 ## Qué hace
 
 1. **Captura** con la cámara integrada (CameraX) o elige una foto de la galería.
-2. **Corrige la perspectiva**: arrastra las 4 esquinas hasta los bordes del papel y la foto
-   se endereza como si la hubieras escaneado.
+2. **Corrige la perspectiva**: arrastra las esquinas hasta los bordes del papel y la foto
+   se endereza como si la hubieras escaneado. Hay dos modos:
+   - **Libre**: cada esquina se mueve por separado, ideal para papeles inclinados o con
+     perspectiva fuerte.
+   - **Rectángulo**: las cuatro esquinas se mueven manteniendo 90°, para fotos ya
+     enderezadas o recortes rápidos.
 3. **Quita el fondo** automáticamente y te deja afinar con tres controles:
    - *Umbral*: cuánta oscuridad cuenta como tinta.
    - *Suavizado*: dureza del borde del trazo.

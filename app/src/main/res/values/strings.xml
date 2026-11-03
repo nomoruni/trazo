@@ -21,6 +21,9 @@
 
     <string name="crop_title">Recortar</string>
     <string name="crop_hint">Arrastra las esquinas hasta los bordes del papel</string>
+    <string name="crop_hint_rect">Arrastra una esquina: el recorte se mantiene rectangular</string>
+    <string name="crop_mode_free">Libre</string>
+    <string name="crop_mode_rect">Rectángulo</string>
     <string name="crop_apply">Aplicar</string>
     <string name="crop_skip">Omitir</string>
     <string name="action_back">Volver</string>

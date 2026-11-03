@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +63,98 @@ private fun defaultCorners(): List<Offset> = listOf(
     Offset(0.04f, 0.96f),
 )
 
+private enum class CropMode { FREE, RECTANGLE }
+
+/** Tamaño mínimo del rectángulo, en fracción de la imagen. */
+private const val MIN_RECT_SIZE = 0.06f
+
+/**
+ * Convierte cuatro puntos cualesquiera en el rectángulo alineado a los ejes que los contiene.
+ * Se usa al pasar del modo libre al rectangular.
+ */
+private fun asRectangle(points: List<Offset>): List<Offset> {
+    val left = points.minOf { it.x }.coerceIn(0f, 1f - MIN_RECT_SIZE)
+    val top = points.minOf { it.y }.coerceIn(0f, 1f - MIN_RECT_SIZE)
+    val right = points.maxOf { it.x }.coerceAtLeast(left + MIN_RECT_SIZE).coerceAtMost(1f)
+    val bottom = points.maxOf { it.y }.coerceAtLeast(top + MIN_RECT_SIZE).coerceAtMost(1f)
+    return rectangleCorners(left, top, right, bottom)
+}
+
+private fun rectangleCorners(left: Float, top: Float, right: Float, bottom: Float) = listOf(
+    Offset(left, top),
+    Offset(right, top),
+    Offset(right, bottom),
+    Offset(left, bottom),
+)
+
+/**
+ * Mueve la esquina [index] a [target] manteniendo la forma rectangular: la esquina opuesta
+ * queda fija y las otras dos se recalculan. Orden de esquinas: sup-izq, sup-der, inf-der, inf-izq.
+ */
+private fun rectangularCorners(current: List<Offset>, index: Int, target: Offset): List<Offset> {
+    val anchor = current[(index + 2) % 4]
+    val x = target.x.coerceIn(0f, 1f)
+    val y = target.y.coerceIn(0f, 1f)
+
+    return when (index) {
+        0 -> { // sup-izq, ancla inf-der
+            val right = anchor.x
+            val bottom = anchor.y
+            rectangleCorners(
+                left = x.coerceAtMost(right - MIN_RECT_SIZE).coerceAtLeast(0f),
+                top = y.coerceAtMost(bottom - MIN_RECT_SIZE).coerceAtLeast(0f),
+                right = right,
+                bottom = bottom,
+            )
+        }
+        1 -> { // sup-der, ancla inf-izq
+            val left = anchor.x
+            val bottom = anchor.y
+            rectangleCorners(
+                left = left,
+                top = y.coerceAtMost(bottom - MIN_RECT_SIZE).coerceAtLeast(0f),
+                right = x.coerceAtLeast(left + MIN_RECT_SIZE).coerceAtMost(1f),
+                bottom = bottom,
+            )
+        }
+        2 -> { // inf-der, ancla sup-izq
+            val left = anchor.x
+            val top = anchor.y
+            rectangleCorners(
+                left = left,
+                top = top,
+                right = x.coerceAtLeast(left + MIN_RECT_SIZE).coerceAtMost(1f),
+                bottom = y.coerceAtLeast(top + MIN_RECT_SIZE).coerceAtMost(1f),
+            )
+        }
+        else -> { // inf-izq, ancla sup-der
+            val right = anchor.x
+            val top = anchor.y
+            rectangleCorners(
+                left = x.coerceAtMost(right - MIN_RECT_SIZE).coerceAtLeast(0f),
+                top = top,
+                right = right,
+                bottom = y.coerceAtLeast(top + MIN_RECT_SIZE).coerceAtMost(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CropModeChip(selected: Boolean, label: String, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = Color.White.copy(alpha = 0.10f),
+            labelColor = Color.White,
+            selectedContainerColor = Color.White,
+            selectedLabelColor = Color.Black,
+        ),
+    )
+}
+
 @Composable
 fun CropScreen(
     bitmap: Bitmap,
@@ -68,6 +162,7 @@ fun CropScreen(
     onApply: (List<Offset>?) -> Unit,
 ) {
     var corners by remember(bitmap) { mutableStateOf(defaultCorners()) }
+    var mode by remember(bitmap) { mutableStateOf(CropMode.FREE) }
     var activeCorner by remember { mutableStateOf(-1) }
 
     Column(
@@ -95,6 +190,28 @@ fun CropScreen(
             IconButton(onClick = { corners = defaultCorners() }) {
                 Icon(Icons.Rounded.RestartAlt, contentDescription = null, tint = Color.White)
             }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            CropModeChip(
+                selected = mode == CropMode.FREE,
+                label = stringResource(R.string.crop_mode_free),
+                onClick = { mode = CropMode.FREE },
+            )
+            Spacer(Modifier.size(8.dp))
+            CropModeChip(
+                selected = mode == CropMode.RECTANGLE,
+                label = stringResource(R.string.crop_mode_rect),
+                onClick = {
+                    if (mode != CropMode.RECTANGLE) corners = asRectangle(corners)
+                    mode = CropMode.RECTANGLE
+                },
+            )
         }
 
         Box(
@@ -143,7 +260,11 @@ fun CropScreen(
                                             (current.x + dragAmount.x / rect.width).coerceIn(0f, 1f),
                                             (current.y + dragAmount.y / rect.height).coerceIn(0f, 1f),
                                         )
-                                        corners = corners.toMutableList().also { it[index] = updated }
+                                        corners = if (mode == CropMode.RECTANGLE) {
+                                            rectangularCorners(corners, index, updated)
+                                        } else {
+                                            corners.toMutableList().also { it[index] = updated }
+                                        }
                                     }
                                 }
                             },
@@ -224,7 +345,9 @@ fun CropScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = stringResource(R.string.crop_hint),
+                text = stringResource(
+                    if (mode == CropMode.RECTANGLE) R.string.crop_hint_rect else R.string.crop_hint,
+                ),
                 color = Color.White.copy(alpha = 0.75f),
                 style = MaterialTheme.typography.bodyMedium,
             )
