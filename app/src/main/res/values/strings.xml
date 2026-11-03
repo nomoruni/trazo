@@ -47,6 +47,9 @@
     <string name="editor_erase_all">Restaurar borrados</string>
     <string name="editor_restore_all">Restaurar borrados</string>
     <string name="editor_undo">Deshacer</string>
+    <string name="editor_redo">Rehacer</string>
+    <string name="editor_clean_hint">Pellizca con dos dedos para acercar, alejar y rotar; con un dedo borras (el círculo marca el grosor).</string>
+    <string name="editor_reset_view">Centrar y quitar zoom</string>
     <string name="editor_crop_again">Volver a recortar</string>
     <string name="editor_save_png">PNG</string>
     <string name="editor_save_pdf">PDF</string>

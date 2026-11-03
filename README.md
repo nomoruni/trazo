@@ -35,7 +35,11 @@ Código fuente en este repositorio; instrucciones para compilar más abajo.
    - *Grosor*: adelgaza o engorda el trazo.
    - Color: tinta negra (recomendado) o el color real del bolígrafo.
 4. **Borrador**: pinta con el dedo para quitar manchas, sombras o trozos de papel.
-   Con deshacer y restaurar.
+   - Un **círculo** marca el grosor real del pincel mientras borras.
+   - **Pellizca con dos dedos** para hacer zoom, desplazar y **rotar** la imagen; un botón
+     la vuelve a centrar.
+   - **Deshacer** y **Rehacer** con hasta **300 pasos** de historial, además de
+     *Restaurar borrados*.
 5. **Exporta**:
    - PNG transparente → `Pictures/Trazo`. Con el modo **Auto** conserva los **2400 × 1412 px**;
      con Libre/Rectángulo, hasta 2400 px de lado.

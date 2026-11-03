@@ -31,6 +31,23 @@ import kotlinx.coroutines.withContext
 
 enum class Screen { HOME, CAMERA, CROP, EDITOR }
 
+/** Acción del historial del borrador, para deshacer y rehacer. */
+private sealed interface EraseAction {
+    /** Trazo continuo con todos sus segmentos. */
+    data class Stroke(val segments: MutableList<EraseSegment> = mutableListOf()) : EraseAction
+
+    /** "Restaurar borrados": vuelve a dejar la firma completa. */
+    data object ClearAll : EraseAction
+}
+
+private data class EraseSegment(
+    val x0: Float,
+    val y0: Float,
+    val x1: Float,
+    val y1: Float,
+    val radius: Float,
+)
+
 class TrazoViewModel(app: Application) : AndroidViewModel(app) {
 
     var screen by mutableStateOf(Screen.HOME)
@@ -69,6 +86,9 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
     var canUndo by mutableStateOf(false)
         private set
 
+    var canRedo by mutableStateOf(false)
+        private set
+
     var message by mutableStateOf<String?>(null)
 
     /** Región del recorte automático sobre [sourceBitmap], en coordenadas normalizadas. */
@@ -80,8 +100,24 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private val renderRequests = Channel<Unit>(Channel.CONFLATED)
-    private val undoStack = ArrayDeque<ByteArray>()
+
+    /**
+     * Historial del borrador como lista de acciones (no copias de la máscara): así se
+     * pueden guardar muchos pasos gastando muy poca memoria y se puede rehacer.
+     */
+    private val eraseHistory = ArrayDeque<EraseAction>()
+    private val redoHistory = ArrayDeque<EraseAction>()
+
+    /** Acciones que ya salieron del historial por el límite de pasos; se reaplican al reconstruir. */
+    private val eraseBase = mutableListOf<EraseSegment>()
+    private var currentStroke: EraseAction.Stroke? = null
+
     private val app: Application = app
+
+    private companion object {
+        /** Pasos de deshacer que se conservan. */
+        const val MAX_HISTORY = 300
+    }
 
     init {
         // Un único trabajador: si llegan muchos cambios seguidos solo renderiza el último.
@@ -195,8 +231,12 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
         }
         processor = newProcessor
         eraserMask = EraserMask(newProcessor.width, newProcessor.height)
-        undoStack.clear()
+        eraseHistory.clear()
+        redoHistory.clear()
+        eraseBase.clear()
+        currentStroke = null
         canUndo = false
+        canRedo = false
         eraserEnabled = false
         settings = SignatureSettings(threshold = newProcessor.suggestThreshold())
         previewBitmap = withContext(Dispatchers.Default) {
@@ -276,33 +316,85 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------- borrador
 
     fun beginErase() {
-        val mask = eraserMask ?: return
-        if (undoStack.size >= 8) undoStack.removeFirst()
-        undoStack.addLast(mask.copy())
-        canUndo = true
+        if (eraserMask == null) return
+        val stroke = EraseAction.Stroke()
+        eraseHistory.addLast(stroke)
+        trimHistory()
+        redoHistory.clear()
+        currentStroke = stroke
+        updateHistoryFlags()
     }
 
     /** Coordenadas en píxeles de la máscara. */
     fun eraseSegment(x0: Float, y0: Float, x1: Float, y1: Float, radius: Float) {
         val mask = eraserMask ?: return
         mask.eraseLine(x0, y0, x1, y1, radius)
+        currentStroke?.segments?.add(EraseSegment(x0, y0, x1, y1, radius))
         requestRender()
     }
 
     fun undoErase() {
-        val snapshot = undoStack.removeLastOrNull() ?: return
-        eraserMask?.restore(snapshot)
-        canUndo = undoStack.isNotEmpty()
+        val mask = eraserMask ?: return
+        val action = eraseHistory.removeLastOrNull() ?: return
+        redoHistory.addLast(action)
+        currentStroke = null
+        rebuildMask(mask)
+        updateHistoryFlags()
+        requestRender()
+    }
+
+    fun redoErase() {
+        val mask = eraserMask ?: return
+        val action = redoHistory.removeLastOrNull() ?: return
+        eraseHistory.addLast(action)
+        currentStroke = null
+        applyAction(mask, action)
+        updateHistoryFlags()
         requestRender()
     }
 
     fun restoreErased() {
         val mask = eraserMask ?: return
-        if (undoStack.size >= 8) undoStack.removeFirst()
-        undoStack.addLast(mask.copy())
-        canUndo = true
+        eraseHistory.addLast(EraseAction.ClearAll)
+        trimHistory()
+        redoHistory.clear()
+        currentStroke = null
         mask.clear()
+        updateHistoryFlags()
         requestRender()
+    }
+
+    /** Si el historial supera el límite, lo más antiguo pasa a [eraseBase]. */
+    private fun trimHistory() {
+        while (eraseHistory.size > MAX_HISTORY) {
+            when (val removed = eraseHistory.removeFirst()) {
+                is EraseAction.Stroke -> eraseBase.addAll(removed.segments)
+                EraseAction.ClearAll -> eraseBase.clear()
+            }
+        }
+    }
+
+    /** Reconstruye la máscara desde cero aplicando [eraseBase] y el historial actual. */
+    private fun rebuildMask(mask: EraserMask) {
+        mask.clear()
+        for (segment in eraseBase) {
+            mask.eraseLine(segment.x0, segment.y0, segment.x1, segment.y1, segment.radius)
+        }
+        for (action in eraseHistory) applyAction(mask, action)
+    }
+
+    private fun applyAction(mask: EraserMask, action: EraseAction) {
+        when (action) {
+            is EraseAction.Stroke -> for (segment in action.segments) {
+                mask.eraseLine(segment.x0, segment.y0, segment.x1, segment.y1, segment.radius)
+            }
+            EraseAction.ClearAll -> mask.clear()
+        }
+    }
+
+    private fun updateHistoryFlags() {
+        canUndo = eraseHistory.isNotEmpty()
+        canRedo = redoHistory.isNotEmpty()
     }
 
     // ------------------------------------------------------------- exportar

@@ -1,8 +1,14 @@
 package com.trazo.scanner.ui
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateRotation
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,10 +28,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Brush
+import androidx.compose.material.icons.rounded.CenterFocusStrong
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Crop
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Redo
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Undo
@@ -52,13 +60,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -69,7 +83,10 @@ import com.trazo.scanner.TrazoViewModel
 import com.trazo.scanner.image.ImageStore
 import com.trazo.scanner.image.InkColorMode
 import com.trazo.scanner.ui.components.SignatureSurface
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 private enum class EditorTab { ADJUST, CLEAN }
 
@@ -82,20 +99,65 @@ fun EditorScreen(
 ) {
     var tab by remember { mutableStateOf(EditorTab.ADJUST) }
     var imageRect by remember { mutableStateOf(Rect.Zero) }
-    var lastMaskPoint by remember { mutableStateOf<Offset?>(null) }
     var exportFormat by remember { mutableStateOf<ExportFormat?>(null) }
     var exportName by remember { mutableStateOf("") }
+
+    // Transformación de la vista (pellizco de dos dedos) y cursor del borrador.
+    var viewSize by remember { mutableStateOf(Size.Zero) }
+    var zoom by remember(viewModel.processor) { mutableStateOf(1f) }
+    var rotation by remember(viewModel.processor) { mutableStateOf(0f) }
+    var pan by remember(viewModel.processor) { mutableStateOf(Offset.Zero) }
+    var brushCursor by remember { mutableStateOf<Offset?>(null) }
 
     val processor = viewModel.processor
 
     fun toMask(point: Offset): Offset? {
         val rect = imageRect
         if (rect.width <= 0f || rect.height <= 0f) return null
-        val x = (point.x - rect.left) / rect.width
-        val y = (point.y - rect.top) / rect.height
+        val center = Offset(viewSize.width / 2f, viewSize.height / 2f)
+        // Deshace la transformación aplicada con graphicsLayer: traslación, rotación y zoom.
+        val relative = (point - center - pan) / zoom
+        val radians = (-rotation * PI.toFloat() / 180f)
+        val cosR = cos(radians)
+        val sinR = sin(radians)
+        val content = center + Offset(
+            relative.x * cosR - relative.y * sinR,
+            relative.x * sinR + relative.y * cosR,
+        )
+        val x = (content.x - rect.left) / rect.width
+        val y = (content.y - rect.top) / rect.height
         if (x < -0.02f || y < -0.02f || x > 1.02f || y > 1.02f) return null
         val p = processor ?: return null
         return Offset(x.coerceIn(0f, 1f) * p.width, y.coerceIn(0f, 1f) * p.height)
+    }
+
+    /** Grosor actual del borrador en píxeles de la máscara (se lee en cada trazo). */
+    fun eraserRadius(): Float = viewModel.brushSize * (processor?.width ?: 1000)
+
+    /**
+     * Aplica zoom/rotación/desplazamiento alrededor del centro de los dedos, de forma que
+     * el punto de la imagen bajo el pellizco se quede quieto.
+     */
+    fun applyViewTransform(
+        centroid: Offset,
+        panChange: Offset,
+        zoomChange: Float,
+        rotationChange: Float,
+    ) {
+        val newZoom = (zoom * zoomChange).coerceIn(1f, 8f)
+        val effectiveZoom = newZoom / zoom
+        val center = Offset(viewSize.width / 2f, viewSize.height / 2f)
+        val vector = centroid - center - pan
+        val radians = rotationChange * PI.toFloat() / 180f
+        val cosR = cos(radians)
+        val sinR = sin(radians)
+        val rotated = Offset(
+            vector.x * cosR - vector.y * sinR,
+            vector.x * sinR + vector.y * cosR,
+        )
+        pan = centroid - center - rotated * effectiveZoom + panChange
+        zoom = newZoom
+        rotation += rotationChange
     }
 
     Column(
@@ -134,44 +196,140 @@ fun EditorScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
-                .pointerInput(viewModel.eraserEnabled, processor) {
-                    if (!viewModel.eraserEnabled) return@pointerInput
-                    val radiusPx = viewModel.brushSize * (processor?.width ?: 1000)
-                    detectDragGestures(
-                        onDragStart = { position ->
-                            viewModel.beginErase()
-                            val maskPoint = toMask(position)
-                            lastMaskPoint = maskPoint
-                            if (maskPoint != null) {
-                                viewModel.eraseSegment(
-                                    maskPoint.x, maskPoint.y, maskPoint.x, maskPoint.y, radiusPx,
-                                )
-                            }
-                        },
-                        onDragEnd = { lastMaskPoint = null },
-                        onDragCancel = { lastMaskPoint = null },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            val maskPoint = toMask(change.position)
-                            if (maskPoint != null) {
-                                val previous = lastMaskPoint
-                                if (previous != null) {
-                                    viewModel.eraseSegment(
-                                        previous.x, previous.y, maskPoint.x, maskPoint.y, radiusPx,
+                .clipToBounds()
+                .onSizeChanged { viewSize = Size(it.width.toFloat(), it.height.toFloat()) }
+                .pointerInput(processor) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val slop = viewConfiguration.touchSlop
+                        var transforming = false
+                        // Tras un pellizco no se borra ni se desplaza hasta levantar los dedos.
+                        var suppressSingle = false
+                        var erasing = false
+                        var slopPassed = false
+                        var lastMask: Offset? = null
+                        if (viewModel.eraserEnabled) brushCursor = down.position
+
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.isEmpty()) break
+
+                            if (pressed.size >= 2) {
+                                if (!transforming) {
+                                    transforming = true
+                                    suppressSingle = true
+                                    erasing = false
+                                    lastMask = null
+                                    brushCursor = null
+                                } else {
+                                    applyViewTransform(
+                                        centroid = event.calculateCentroid(useCurrent = false),
+                                        panChange = event.calculatePan(),
+                                        zoomChange = event.calculateZoom(),
+                                        rotationChange = event.calculateRotation(),
                                     )
                                 }
-                                lastMaskPoint = maskPoint
+                                event.changes.forEach { it.consume() }
+                                continue
                             }
-                        },
-                    )
+
+                            val change = pressed.first()
+                            if (transforming) transforming = false
+                            if (suppressSingle) continue
+
+                            val position = change.position
+                            if (!slopPassed) {
+                                slopPassed = (position - down.position).getDistance() > slop
+                            }
+                            if (slopPassed) {
+                                if (viewModel.eraserEnabled) {
+                                    if (!erasing) {
+                                        viewModel.beginErase()
+                                        erasing = true
+                                        lastMask = toMask(down.position)
+                                        lastMask?.let { start ->
+                                            viewModel.eraseSegment(
+                                                start.x, start.y, start.x, start.y, eraserRadius(),
+                                            )
+                                        }
+                                    }
+                                    val maskPoint = toMask(position)
+                                    if (maskPoint != null) {
+                                        val previous = lastMask
+                                        val radius = eraserRadius()
+                                        if (previous != null) {
+                                            viewModel.eraseSegment(
+                                                previous.x, previous.y, maskPoint.x, maskPoint.y, radius,
+                                            )
+                                        } else {
+                                            viewModel.eraseSegment(
+                                                maskPoint.x, maskPoint.y, maskPoint.x, maskPoint.y, radius,
+                                            )
+                                        }
+                                        lastMask = maskPoint
+                                    }
+                                } else {
+                                    if (zoom > 1.001f) pan += change.positionChange()
+                                }
+                                change.consume()
+                            }
+                            brushCursor = if (viewModel.eraserEnabled) position else null
+                        }
+
+                        // Un toque sin arrastrar también borra un punto.
+                        if (!suppressSingle && !slopPassed && viewModel.eraserEnabled) {
+                            val point = toMask(down.position)
+                            if (point != null) {
+                                viewModel.beginErase()
+                                viewModel.eraseSegment(
+                                    point.x, point.y, point.x, point.y, eraserRadius(),
+                                )
+                            }
+                        }
+                        brushCursor = null
+                    }
                 },
         ) {
-            SignatureSurface(
-                bitmap = if (viewModel.showOriginal) viewModel.croppedBitmap else viewModel.previewBitmap,
-                modifier = Modifier.fillMaxSize(),
-                checker = !viewModel.showOriginal,
-                onRect = { imageRect = it },
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = zoom
+                        scaleY = zoom
+                        rotationZ = rotation
+                        translationX = pan.x
+                        translationY = pan.y
+                    },
+            ) {
+                SignatureSurface(
+                    bitmap = if (viewModel.showOriginal) viewModel.croppedBitmap else viewModel.previewBitmap,
+                    modifier = Modifier.fillMaxSize(),
+                    checker = !viewModel.showOriginal,
+                    onRect = { imageRect = it },
+                )
+            }
+
+            val cursor = brushCursor
+            if (viewModel.eraserEnabled && cursor != null) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val radius = viewModel.brushSize * imageRect.width * zoom
+                    if (radius > 0.5f) {
+                        drawCircle(
+                            color = Color(0x66000000),
+                            radius = radius + 1.dp.toPx(),
+                            center = cursor,
+                            style = Stroke(width = 3.dp.toPx()),
+                        )
+                        drawCircle(
+                            color = Color.White,
+                            radius = radius,
+                            center = cursor,
+                            style = Stroke(width = 1.5.dp.toPx()),
+                        )
+                    }
+                }
+            }
 
             if (viewModel.eraserEnabled) {
                 Surface(
@@ -200,6 +358,29 @@ fun EditorScreen(
                     }
                 }
             }
+
+            if (zoom != 1f || rotation != 0f || pan != Offset.Zero) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ) {
+                    IconButton(onClick = {
+                        zoom = 1f
+                        rotation = 0f
+                        pan = Offset.Zero
+                    }) {
+                        Icon(
+                            Icons.Rounded.CenterFocusStrong,
+                            contentDescription = stringResource(R.string.editor_reset_view),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
         }
 
         Surface(
@@ -216,7 +397,10 @@ fun EditorScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = tab == EditorTab.ADJUST,
-                        onClick = { tab = EditorTab.ADJUST },
+                        onClick = {
+                            tab = EditorTab.ADJUST
+                            viewModel.eraserEnabled = false
+                        },
                         label = { Text(stringResource(R.string.editor_tab_adjust)) },
                     )
                     FilterChip(
@@ -406,6 +590,14 @@ private fun CleanTab(viewModel: TrazoViewModel) {
         leadingIcon = { Icon(Icons.Rounded.Brush, null, Modifier.size(18.dp)) },
     )
 
+    Spacer(Modifier.height(4.dp))
+
+    Text(
+        text = stringResource(R.string.editor_clean_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
     LabeledSlider(
         label = stringResource(R.string.editor_brush),
         value = viewModel.brushSize,
@@ -413,12 +605,22 @@ private fun CleanTab(viewModel: TrazoViewModel) {
         onChange = { viewModel.brushSize = it },
     )
 
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         TextButton(onClick = viewModel::undoErase, enabled = viewModel.canUndo) {
             Icon(Icons.Rounded.Undo, null, Modifier.size(18.dp))
             Spacer(Modifier.size(6.dp))
             Text(stringResource(R.string.editor_undo))
         }
+        TextButton(onClick = viewModel::redoErase, enabled = viewModel.canRedo) {
+            Icon(Icons.Rounded.Redo, null, Modifier.size(18.dp))
+            Spacer(Modifier.size(6.dp))
+            Text(stringResource(R.string.editor_redo))
+        }
+        Spacer(Modifier.weight(1f))
         TextButton(onClick = viewModel::restoreErased) {
             Text(stringResource(R.string.editor_restore_all))
         }
