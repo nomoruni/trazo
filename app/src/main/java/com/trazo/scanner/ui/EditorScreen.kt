@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Brush
@@ -29,38 +31,49 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.trazo.scanner.R
 import com.trazo.scanner.TrazoViewModel
+import com.trazo.scanner.image.ImageStore
 import com.trazo.scanner.image.InkColorMode
 import com.trazo.scanner.ui.components.SignatureSurface
 import kotlin.math.roundToInt
 
 private enum class EditorTab { ADJUST, CLEAN }
+
+private enum class ExportFormat { PNG, PDF }
 
 @Composable
 fun EditorScreen(
@@ -70,6 +83,8 @@ fun EditorScreen(
     var tab by remember { mutableStateOf(EditorTab.ADJUST) }
     var imageRect by remember { mutableStateOf(Rect.Zero) }
     var lastMaskPoint by remember { mutableStateOf<Offset?>(null) }
+    var exportFormat by remember { mutableStateOf<ExportFormat?>(null) }
+    var exportName by remember { mutableStateOf("") }
 
     val processor = viewModel.processor
 
@@ -228,13 +243,19 @@ fun EditorScreen(
                         icon = Icons.Rounded.Image,
                         label = stringResource(R.string.editor_save_png),
                         modifier = Modifier.weight(1f),
-                        onClick = viewModel::savePng,
+                        onClick = {
+                            exportName = viewModel.defaultExportName()
+                            exportFormat = ExportFormat.PNG
+                        },
                     )
                     ActionButton(
                         icon = Icons.Rounded.Description,
                         label = stringResource(R.string.editor_save_pdf),
                         modifier = Modifier.weight(1f),
-                        onClick = viewModel::savePdf,
+                        onClick = {
+                            exportName = viewModel.defaultExportName()
+                            exportFormat = ExportFormat.PDF
+                        },
                     )
                     ActionButton(
                         icon = Icons.Rounded.Share,
@@ -245,6 +266,87 @@ fun EditorScreen(
                 }
             }
         }
+    }
+
+    val format = exportFormat
+    if (format != null) {
+        ExportNameDialog(
+            format = format,
+            initialName = exportName,
+            onNameChange = { exportName = it },
+            onDismiss = { exportFormat = null },
+            onConfirm = { name ->
+                exportFormat = null
+                when (format) {
+                    ExportFormat.PNG -> viewModel.savePng(name)
+                    ExportFormat.PDF -> viewModel.savePdf(name)
+                }
+            },
+        )
+    }
+}
+
+/**
+ * Diálogo para escribir el nombre del archivo exportado. El nombre se limpia antes de
+ * guardarlo (caracteres inválidos, extensiones duplicadas, nombre vacío).
+ */
+@Composable
+private fun ExportNameDialog(
+    format: ExportFormat,
+    initialName: String,
+    onNameChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    val fallback = remember { initialName.ifBlank { "firma" } }
+    val clean = ImageStore.sanitizeName(initialName, fallback)
+    val extension = if (format == ExportFormat.PDF) "pdf" else "png"
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val confirm = {
+        keyboard?.hide()
+        onConfirm(clean)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.export_name_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = initialName,
+                    onValueChange = onNameChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    label = { Text(stringResource(R.string.export_name_label)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { confirm() }),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.export_name_hint, "$clean.$extension"),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = confirm, enabled = clean.isNotBlank()) {
+                Text(stringResource(R.string.export_name_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
+
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        focusRequester.requestFocus()
+        keyboard?.show()
     }
 }
 

@@ -51,10 +51,16 @@
     <string name="editor_share">Compartir</string>
     <string name="editor_reset">Restablecer</string>
 
-    <string name="saved_png">Firma guardada en la galería</string>
-    <string name="saved_pdf">PDF guardado en Documentos</string>
+    <string name="saved_png">Firma guardada como %1$s.png en la galería</string>
+    <string name="saved_pdf">PDF guardado como %1$s.pdf en Documentos</string>
     <string name="saved_error">No se pudo guardar</string>
     <string name="share_title">Compartir firma</string>
+
+    <string name="export_name_title">Guardar como</string>
+    <string name="export_name_label">Nombre del archivo</string>
+    <string name="export_name_hint">Se guardará como %1$s</string>
+    <string name="export_name_confirm">Guardar</string>
+    <string name="action_cancel">Cancelar</string>
 
     <string name="processing">Procesando…</string>
     <string name="error_load">No se pudo abrir la imagen</string>

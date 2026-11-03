@@ -272,24 +272,30 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------- exportar
 
-    fun savePng() = export(asPdf = false)
+    /** Nombre propuesto en el diálogo de guardado, p. ej. `firma_20261103_1530`. */
+    fun defaultExportName(): String = "firma_${ImageStore.timestamp()}"
 
-    fun savePdf() = export(asPdf = true)
+    fun savePng(name: String) = export(asPdf = false, rawName = name)
 
-    private fun export(asPdf: Boolean) {
+    fun savePdf(name: String) = export(asPdf = true, rawName = name)
+
+    private fun export(asPdf: Boolean, rawName: String) {
         val target = processor ?: return
         busy = true
         viewModelScope.launch {
             val bitmap = withContext(Dispatchers.Default) {
                 target.render(settings, eraserMask?.takeIf { !it.isEmpty() }?.values)
             }
-            val name = "firma_${ImageStore.timestamp()}"
+            val name = ImageStore.sanitizeName(rawName, defaultExportName())
             val result = withContext(Dispatchers.IO) {
                 if (asPdf) ImageStore.savePdf(app, bitmap, name) else ImageStore.savePng(app, bitmap, name)
             }
             busy = false
             message = when (result) {
-                is SaveResult.Success -> app.getString(if (asPdf) R.string.saved_pdf else R.string.saved_png)
+                is SaveResult.Success -> app.getString(
+                    if (asPdf) R.string.saved_pdf else R.string.saved_png,
+                    name,
+                )
                 is SaveResult.PermissionRequired -> app.getString(R.string.saved_error)
                 is SaveResult.Failure -> app.getString(R.string.saved_error)
             }

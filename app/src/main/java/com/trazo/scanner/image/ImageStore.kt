@@ -41,6 +41,19 @@ object ImageStore {
     fun timestamp(): String =
         SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
 
+    /** Limpia el nombre escrito por el usuario para usarlo como nombre de archivo. */
+    fun sanitizeName(raw: String, fallback: String): String {
+        var base = raw.trim()
+            .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_")
+            .trim('.', ' ')
+            .take(80)
+        val lower = base.lowercase()
+        if (lower.endsWith(".png") || lower.endsWith(".pdf")) {
+            base = base.dropLast(4).trim('.', ' ')
+        }
+        return base.ifBlank { fallback }
+    }
+
     // ---------------------------------------------------------------- lectura
 
     /**

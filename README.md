@@ -39,6 +39,8 @@ Código fuente en este repositorio; instrucciones para compilar más abajo.
    - PNG transparente → `Pictures/Trazo`. En capturas de cámara conserva los **2400 × 1412 px**
      del recuadro guía (máximo 2400 px de lado en fotos de galería).
    - PDF A4 con fondo blanco → `Download/Trazo`.
+   - Antes de guardar puedes **cambiar el nombre del archivo** (se limpia solo: quita
+     caracteres inválidos y extensiones duplicadas).
    - Compartir directamente (WhatsApp, correo, Drive…).
 
 ## Cómo se quita el fondo (la parte interesante)
