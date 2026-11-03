@@ -12,7 +12,7 @@
     <string name="home_tip">Consejo: papel blanco, luz pareja y sin sombras. La app se encarga del resto.</string>
 
     <string name="camera_title">Capturar firma</string>
-    <string name="camera_hint">Encuadra la firma y pulsa el disparador</string>
+    <string name="camera_hint">Encuadra la firma dentro del recuadro · la foto se recortará a 2400 × 1412</string>
     <string name="camera_permission_title">Necesitamos la cámara</string>
     <string name="camera_permission_text">Para fotografiar tu firma directamente desde la app.</string>
     <string name="camera_permission_button">Conceder permiso</string>

@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.trazo.scanner.image.CaptureGuide
 import com.trazo.scanner.image.EraserMask
 import com.trazo.scanner.image.ImageStore
 import com.trazo.scanner.image.InkColorMode
@@ -137,6 +138,57 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Foto hecha con la cámara: se recorta automáticamente a la zona del recuadro guía
+     * y se abre directamente el editor. Si el recorte falla, se cae al recorte manual.
+     */
+    fun openCaptured(uri: Uri, guide: CaptureGuide) {
+        busy = true
+        viewModelScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                ImageStore.decode(app, uri, maxSide = 2600)
+            }
+            if (bitmap == null) {
+                busy = false
+                message = app.getString(R.string.error_load)
+                return@launch
+            }
+            val cropped = withContext(Dispatchers.Default) {
+                ImageStore.cropToGuide(bitmap, guide)
+            }
+            if (cropped == null) {
+                sourceBitmap = bitmap
+                croppedBitmap = null
+                previewBitmap = null
+                processor = null
+                busy = false
+                screen = Screen.CROP
+                return@launch
+            }
+            sourceBitmap = cropped
+            startEditor(cropped)
+            busy = false
+            screen = Screen.EDITOR
+        }
+    }
+
+    /** Deja el editor listo sobre [cropped]: procesador, máscara de borrado y vista previa. */
+    private suspend fun startEditor(cropped: Bitmap) {
+        croppedBitmap = cropped
+        val newProcessor = withContext(Dispatchers.Default) {
+            SignatureProcessor.create(cropped)
+        }
+        processor = newProcessor
+        eraserMask = EraserMask(newProcessor.width, newProcessor.height)
+        undoStack.clear()
+        canUndo = false
+        eraserEnabled = false
+        settings = SignatureSettings(threshold = newProcessor.suggestThreshold())
+        previewBitmap = withContext(Dispatchers.Default) {
+            newProcessor.render(settings, scale = previewScale(newProcessor))
+        }
+    }
+
+    /**
      * @param corners esquinas en coordenadas normalizadas (0..1) de [sourceBitmap],
      * en orden sup-izq, sup-der, inf-der, inf-izq. `null` = sin recorte.
      */
@@ -152,19 +204,7 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
                     PerspectiveWarp.warp(src, points, 2400)
                 }
             }
-            croppedBitmap = cropped
-            val newProcessor = withContext(Dispatchers.Default) {
-                SignatureProcessor.create(cropped)
-            }
-            processor = newProcessor
-            eraserMask = EraserMask(newProcessor.width, newProcessor.height)
-            undoStack.clear()
-            canUndo = false
-            eraserEnabled = false
-            settings = SignatureSettings(threshold = newProcessor.suggestThreshold())
-            previewBitmap = withContext(Dispatchers.Default) {
-                newProcessor.render(settings, scale = previewScale(newProcessor))
-            }
+            startEditor(cropped)
             busy = false
             screen = Screen.EDITOR
         }

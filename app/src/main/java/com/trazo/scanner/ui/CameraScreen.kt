@@ -11,14 +11,18 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -50,7 +54,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -58,6 +69,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.trazo.scanner.R
+import com.trazo.scanner.image.CaptureGuide
+import com.trazo.scanner.image.captureGuideFor
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import kotlin.coroutines.resume
@@ -66,7 +79,7 @@ import kotlin.coroutines.resumeWithException
 @Composable
 fun CameraScreen(
     onBack: () -> Unit,
-    onCaptured: (Uri) -> Unit,
+    onCaptured: (Uri, CaptureGuide) -> Unit,
 ) {
     val context = LocalContext.current
     var granted by remember {
@@ -143,7 +156,7 @@ private fun PermissionDenied(onBack: () -> Unit, onRequest: () -> Unit) {
 @Composable
 private fun CameraContent(
     onBack: () -> Unit,
-    onCaptured: (Uri) -> Unit,
+    onCaptured: (Uri, CaptureGuide) -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -164,10 +177,20 @@ private fun CameraContent(
             val cameraProvider = context.awaitCameraProvider()
             provider = cameraProvider
 
-            val preview = Preview.Builder().build().apply {
-                setSurfaceProvider(previewView.surfaceProvider)
-            }
+            val resolutionSelector = ResolutionSelector.Builder()
+                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+                .build()
+
+            val preview = Preview.Builder()
+                .setResolutionSelector(resolutionSelector)
+                .build()
+                .apply {
+                    setSurfaceProvider(previewView.surfaceProvider)
+                }
+            // La misma proporción en preview y captura: así el recuadro guía coincide
+            // con la zona que realmente se recorta de la foto.
             val capture = ImageCapture.Builder()
+                .setResolutionSelector(resolutionSelector)
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .build()
 
@@ -188,11 +211,17 @@ private fun CameraContent(
         onDispose { provider?.unbindAll() }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+        val viewWidth = constraints.maxWidth.toFloat()
+        val viewHeight = constraints.maxHeight.toFloat()
+        val guide = remember(viewWidth, viewHeight) { captureGuideFor(viewWidth, viewHeight) }
+
         AndroidView(
             factory = { previewView },
             modifier = Modifier.fillMaxSize(),
         )
+
+        GuideOverlay(guide)
 
         Row(
             modifier = Modifier
@@ -231,6 +260,7 @@ private fun CameraContent(
             Spacer(Modifier.height(18.dp))
             ShutterButton(enabled = imageCapture != null && !capturing && error == null) {
                 val capture = imageCapture ?: return@ShutterButton
+                previewView.display?.rotation?.let { capture.targetRotation = it }
                 capturing = true
                 error = null
                 try {
@@ -246,7 +276,7 @@ private fun CameraContent(
                                 if (file.length() <= 0L) {
                                     error = "La foto se guardó vacía"
                                 } else {
-                                    onCaptured(Uri.fromFile(file))
+                                    onCaptured(Uri.fromFile(file), guide)
                                 }
                             }
 
@@ -273,6 +303,46 @@ private fun CameraContent(
                 CircularProgressIndicator(color = Color.White)
             }
         }
+    }
+}
+
+/** Oscurece lo que queda fuera del recuadro guía y marca sus esquinas. */
+@Composable
+private fun GuideOverlay(guide: CaptureGuide) {
+    Canvas(Modifier.fillMaxSize()) {
+        val left = guide.left * size.width
+        val top = guide.top * size.height
+        val right = guide.right * size.width
+        val bottom = guide.bottom * size.height
+
+        val scrim = Path().apply {
+            fillType = PathFillType.EvenOdd
+            addRect(Rect(0f, 0f, size.width, size.height))
+            addRect(Rect(left, top, right, bottom))
+        }
+        drawPath(scrim, Color(0x88000000))
+
+        drawRect(
+            color = Color.White.copy(alpha = 0.85f),
+            topLeft = Offset(left, top),
+            size = Size(right - left, bottom - top),
+            style = Stroke(width = 1.5.dp.toPx()),
+        )
+
+        val arm = 26.dp.toPx()
+        val stroke = 3.dp.toPx()
+        fun line(x0: Float, y0: Float, x1: Float, y1: Float) {
+            drawLine(Color.White, Offset(x0, y0), Offset(x1, y1), stroke, StrokeCap.Round)
+        }
+
+        line(left, top, left + arm, top)
+        line(left, top, left, top + arm)
+        line(right, top, right - arm, top)
+        line(right, top, right, top + arm)
+        line(right, bottom, right - arm, bottom)
+        line(right, bottom, right, bottom - arm)
+        line(left, bottom, left + arm, bottom)
+        line(left, bottom, left, bottom - arm)
     }
 }
 

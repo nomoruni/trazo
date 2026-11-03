@@ -19,6 +19,9 @@ Código fuente en este repositorio; instrucciones para compilar más abajo.
 ## Qué hace
 
 1. **Captura** con la cámara integrada (CameraX) o elige una foto de la galería.
+   La cámara muestra un **recuadro guía** de proporción **2400:1412**; al disparar, la foto
+   se **recorta automáticamente** a esa zona (y se escala a 2400 × 1412 px), así que el
+   editor se abre ya con el encuadre hecho.
 2. **Corrige la perspectiva**: arrastra las esquinas hasta los bordes del papel y la foto
    se endereza como si la hubieras escaneado. Hay dos modos:
    - **Libre**: cada esquina se mueve por separado, ideal para papeles inclinados o con
@@ -67,6 +70,7 @@ app/src/main/java/com/trazo/scanner/
 ├── TrazoViewModel.kt            # estado, recorte, render con debounce, exportar
 ├── image/
 │   ├── SignatureProcessor.kt    # núcleo: iluminación → tinta → alfa (Otsu + LUT)
+│   ├── CaptureGuide.kt          # recuadro guía de la cámara y recorte 2400 × 1412
 │   ├── PerspectiveWarp.kt       # homografía de 4 puntos (Heckbert) + muestreo bilineal
 │   ├── EraserMask.kt            # máscara de borrado con pincel circular
 │   └── ImageStore.kt            # decodificar/EXIF, guardar PNG y PDF, compartir

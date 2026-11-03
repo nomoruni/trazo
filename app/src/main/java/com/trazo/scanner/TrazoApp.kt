@@ -53,7 +53,7 @@ fun TrazoApp(viewModel: TrazoViewModel) {
 
             Screen.CAMERA -> CameraScreen(
                 onBack = viewModel::back,
-                onCaptured = viewModel::openImage,
+                onCaptured = viewModel::openCaptured,
             )
 
             Screen.CROP -> {
