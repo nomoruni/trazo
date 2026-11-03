@@ -85,6 +85,8 @@ import com.trazo.scanner.image.InkColorMode
 import com.trazo.scanner.ui.components.SignatureSurface
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.ln
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -314,7 +316,7 @@ fun EditorScreen(
             if (viewModel.eraserEnabled && cursor != null) {
                 Canvas(Modifier.fillMaxSize()) {
                     val radius = viewModel.brushSize * imageRect.width * zoom
-                    if (radius > 0.5f) {
+                    if (radius > 0.05f) {
                         drawCircle(
                             color = Color(0x66000000),
                             radius = radius + 1.dp.toPx(),
@@ -598,11 +600,14 @@ private fun CleanTab(viewModel: TrazoViewModel) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
+    // El deslizador es exponencial: así se puede afinar en los grosores finos sin perder
+    // el rango grande. 0 = mínimo, 1 = máximo.
     LabeledSlider(
         label = stringResource(R.string.editor_brush),
-        value = viewModel.brushSize,
-        range = 0.01f..0.2f,
-        onChange = { viewModel.brushSize = it },
+        value = brushToSlider(viewModel.brushSize),
+        range = 0f..1f,
+        valueText = "%.1f%%".format(viewModel.brushSize * 100),
+        onChange = { viewModel.brushSize = sliderToBrush(it) },
     )
 
     Row(
@@ -627,12 +632,25 @@ private fun CleanTab(viewModel: TrazoViewModel) {
     }
 }
 
+/** Grosor mínimo y máximo del borrador, como fracción del ancho de la imagen. */
+private const val MIN_BRUSH = 0.001f
+private const val MAX_BRUSH = 0.2f
+
+/** Convierte el grosor (fracción del ancho) a la posición 0..1 del deslizador. */
+private fun brushToSlider(size: Float): Float =
+    (ln(size / MIN_BRUSH) / ln(MAX_BRUSH / MIN_BRUSH)).coerceIn(0f, 1f)
+
+/** Convierte la posición 0..1 del deslizador al grosor del borrador. */
+private fun sliderToBrush(position: Float): Float =
+    MIN_BRUSH * (MAX_BRUSH / MIN_BRUSH).pow(position.coerceIn(0f, 1f))
+
 @Composable
 private fun LabeledSlider(
     label: String,
     value: Float,
     onChange: (Float) -> Unit,
     range: ClosedFloatingPointRange<Float> = 0f..1f,
+    valueText: String? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -651,9 +669,9 @@ private fun LabeledSlider(
             modifier = Modifier.weight(1f),
         )
         Text(
-            text = "${(value * 100).roundToInt()}",
+            text = valueText ?: "${(value * 100).roundToInt()}",
             style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.width(34.dp),
+            modifier = Modifier.width(40.dp),
             textAlign = TextAlign.End,
         )
     }

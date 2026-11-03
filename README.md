@@ -36,6 +36,8 @@ Código fuente en este repositorio; instrucciones para compilar más abajo.
    - Color: tinta negra (recomendado) o el color real del bolígrafo.
 4. **Borrador**: pinta con el dedo para quitar manchas, sombras o trozos de papel.
    - Un **círculo** marca el grosor real del pincel mientras borras.
+   - El grosor va de **0,1 % a 20 %** del ancho de la imagen, con un deslizador
+     exponencial para afinar bien en los trazos más finos.
    - **Pellizca con dos dedos** para hacer zoom, desplazar y **rotar** la imagen; un botón
      la vuelve a centrar.
    - **Deshacer** y **Rehacer** con hasta **300 pasos** de historial, además de
