@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Trazo</string>
+    <string name="app_tagline">Firmas limpias, fondo transparente</string>
+
+    <string name="home_title">Trazo</string>
+    <string name="home_subtitle">Escanea tu firma y quédate solo con el trazo. Sin fondo, sin papel.</string>
+    <string name="home_camera">Tomar foto</string>
+    <string name="home_camera_desc">Captura la firma sobre papel</string>
+    <string name="home_gallery">Elegir de galería</string>
+    <string name="home_gallery_desc">Usa una foto que ya tengas</string>
+    <string name="home_tip">Consejo: papel blanco, luz pareja y sin sombras. La app se encarga del resto.</string>
+
+    <string name="camera_title">Capturar firma</string>
+    <string name="camera_hint">Encuadra la firma y pulsa el disparador</string>
+    <string name="camera_permission_title">Necesitamos la cámara</string>
+    <string name="camera_permission_text">Para fotografiar tu firma directamente desde la app.</string>
+    <string name="camera_permission_button">Conceder permiso</string>
+    <string name="camera_permission_settings">Abrir ajustes</string>
+    <string name="camera_flash">Flash</string>
+
+    <string name="crop_title">Recortar</string>
+    <string name="crop_hint">Arrastra las esquinas hasta los bordes del papel</string>
+    <string name="crop_apply">Aplicar</string>
+    <string name="crop_skip">Omitir</string>
+    <string name="action_back">Volver</string>
+    <string name="crop_reset">Reiniciar esquinas</string>
+
+    <string name="editor_title">Tu firma</string>
+    <string name="editor_original">Original</string>
+    <string name="editor_result">Firma</string>
+    <string name="editor_compare">Mantén pulsado para ver la foto original</string>
+    <string name="editor_tab_adjust">Ajustes</string>
+    <string name="editor_tab_clean">Limpiar</string>
+    <string name="editor_threshold">Umbral</string>
+    <string name="editor_softness">Suavizado</string>
+    <string name="editor_weight">Grosor</string>
+    <string name="editor_color_black">Tinta negra</string>
+    <string name="editor_color_original">Color original</string>
+    <string name="editor_eraser">Borrador</string>
+    <string name="editor_brush">Grosor del borrador</string>
+    <string name="editor_erase_all">Restaurar borrados</string>
+    <string name="editor_restore_all">Restaurar borrados</string>
+    <string name="editor_undo">Deshacer</string>
+    <string name="editor_crop_again">Volver a recortar</string>
+    <string name="editor_save_png">PNG</string>
+    <string name="editor_save_pdf">PDF</string>
+    <string name="editor_share">Compartir</string>
+    <string name="editor_reset">Restablecer</string>
+
+    <string name="saved_png">Firma guardada en la galería</string>
+    <string name="saved_pdf">PDF guardado en Documentos</string>
+    <string name="saved_error">No se pudo guardar</string>
+    <string name="share_title">Compartir firma</string>
+
+    <string name="processing">Procesando…</string>
+    <string name="error_load">No se pudo abrir la imagen</string>
+</resources>
