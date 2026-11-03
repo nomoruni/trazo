@@ -12,7 +12,7 @@
     <string name="home_tip">Consejo: papel blanco, luz pareja y sin sombras. La app se encarga del resto.</string>
 
     <string name="camera_title">Capturar firma</string>
-    <string name="camera_hint">Encuadra la firma dentro del recuadro · la foto se recortará a 2400 × 1412</string>
+    <string name="camera_hint">Encuadra la firma dentro del recuadro · podrás ajustar el recorte</string>
     <string name="camera_permission_title">Necesitamos la cámara</string>
     <string name="camera_permission_text">Para fotografiar tu firma directamente desde la app.</string>
     <string name="camera_permission_button">Conceder permiso</string>
@@ -22,6 +22,8 @@
     <string name="crop_title">Recortar</string>
     <string name="crop_hint">Arrastra las esquinas hasta los bordes del papel</string>
     <string name="crop_hint_rect">Arrastra una esquina: el recorte se mantiene rectangular</string>
+    <string name="crop_hint_auto">Recorte automático a 2400 × 1412. Elige Libre o Rectángulo para ajustar</string>
+    <string name="crop_mode_auto">Auto</string>
     <string name="crop_mode_free">Libre</string>
     <string name="crop_mode_rect">Rectángulo</string>
     <string name="crop_apply">Aplicar</string>

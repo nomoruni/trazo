@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.trazo.scanner.image.CAPTURE_HEIGHT
+import com.trazo.scanner.image.CAPTURE_WIDTH
 import com.trazo.scanner.image.CaptureGuide
 import com.trazo.scanner.image.EraserMask
 import com.trazo.scanner.image.ImageStore
@@ -18,7 +20,10 @@ import com.trazo.scanner.image.PerspectiveWarp
 import com.trazo.scanner.image.SaveResult
 import com.trazo.scanner.image.SignatureProcessor
 import com.trazo.scanner.image.SignatureSettings
+import com.trazo.scanner.image.centeredCropRect
+import com.trazo.scanner.image.rectToNormalizedCorners
 import com.trazo.scanner.image.scaleToFit
+import com.trazo.scanner.image.toImageRect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -65,6 +70,14 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     var message by mutableStateOf<String?>(null)
+
+    /** Región del recorte automático sobre [sourceBitmap], en coordenadas normalizadas. */
+    var autoCropCorners by mutableStateOf<List<PointF>?>(null)
+        private set
+
+    /** Si al abrir el recorte hay que empezar en modo Automático (foto de cámara). */
+    var cropStartsWithAuto by mutableStateOf(false)
+        private set
 
     private val renderRequests = Channel<Unit>(Channel.CONFLATED)
     private val undoStack = ArrayDeque<ByteArray>()
@@ -133,13 +146,21 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
             croppedBitmap = null
             previewBitmap = null
             processor = null
+            // Sin recuadro de cámara: el modo Automático propone un recorte centrado 2400:1412.
+            autoCropCorners = rectToNormalizedCorners(
+                centeredCropRect(bitmap.width, bitmap.height),
+                bitmap.width,
+                bitmap.height,
+            )
+            cropStartsWithAuto = false
             screen = Screen.CROP
         }
     }
 
     /**
-     * Foto hecha con la cámara: se recorta automáticamente a la zona del recuadro guía
-     * y se abre directamente el editor. Si el recorte falla, se cae al recorte manual.
+     * Foto hecha con la cámara: se abre el recorte con los tres modos disponibles
+     * (Automático, Libre y Rectángulo), empezando en Automático con la zona del
+     * recuadro guía. Así se puede aceptar el recorte sugerido o ajustarlo a mano.
      */
     fun openCaptured(uri: Uri, guide: CaptureGuide) {
         busy = true
@@ -147,27 +168,22 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
             val bitmap = withContext(Dispatchers.IO) {
                 ImageStore.decode(app, uri, maxSide = 2600)
             }
+            busy = false
             if (bitmap == null) {
-                busy = false
                 message = app.getString(R.string.error_load)
                 return@launch
             }
-            val cropped = withContext(Dispatchers.Default) {
-                ImageStore.cropToGuide(bitmap, guide)
-            }
-            if (cropped == null) {
-                sourceBitmap = bitmap
-                croppedBitmap = null
-                previewBitmap = null
-                processor = null
-                busy = false
-                screen = Screen.CROP
-                return@launch
-            }
-            sourceBitmap = cropped
-            startEditor(cropped)
-            busy = false
-            screen = Screen.EDITOR
+            sourceBitmap = bitmap
+            croppedBitmap = null
+            previewBitmap = null
+            processor = null
+            autoCropCorners = rectToNormalizedCorners(
+                guide.toImageRect(bitmap.width, bitmap.height),
+                bitmap.width,
+                bitmap.height,
+            )
+            cropStartsWithAuto = true
+            screen = Screen.CROP
         }
     }
 
@@ -191,8 +207,10 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * @param corners esquinas en coordenadas normalizadas (0..1) de [sourceBitmap],
      * en orden sup-izq, sup-der, inf-der, inf-izq. `null` = sin recorte.
+     * @param auto `true` cuando viene del modo Automático: además de recortar, se escala
+     * al tamaño fijo de la firma (2400 × 1412).
      */
-    fun applyCrop(corners: List<PointF>?) {
+    fun applyCrop(corners: List<PointF>?, auto: Boolean = false) {
         val src = sourceBitmap ?: return
         busy = true
         viewModelScope.launch {
@@ -201,10 +219,27 @@ class TrazoViewModel(app: Application) : AndroidViewModel(app) {
                     scaleToFit(src, 2400)
                 } else {
                     val points = corners.map { PointF(it.x * src.width, it.y * src.height) }
-                    PerspectiveWarp.warp(src, points, 2400)
+                    val warped = PerspectiveWarp.warp(src, points, 2400)
+                    if (auto) {
+                        if (warped.width != CAPTURE_WIDTH || warped.height != CAPTURE_HEIGHT) {
+                            val scaled = Bitmap.createScaledBitmap(
+                                warped,
+                                CAPTURE_WIDTH,
+                                CAPTURE_HEIGHT,
+                                true,
+                            )
+                            if (scaled !== warped) warped.recycle()
+                            scaled
+                        } else {
+                            warped
+                        }
+                    } else {
+                        warped
+                    }
                 }
             }
             startEditor(cropped)
+            cropStartsWithAuto = false
             busy = false
             screen = Screen.EDITOR
         }

@@ -19,15 +19,16 @@ Código fuente en este repositorio; instrucciones para compilar más abajo.
 ## Qué hace
 
 1. **Captura** con la cámara integrada (CameraX) o elige una foto de la galería.
-   La cámara muestra un **recuadro guía** de proporción **2400:1412**; al disparar, la foto
-   se **recorta automáticamente** a esa zona (y se escala a 2400 × 1412 px), así que el
-   editor se abre ya con el encuadre hecho.
-2. **Corrige la perspectiva**: arrastra las esquinas hasta los bordes del papel y la foto
-   se endereza como si la hubieras escaneado. Hay dos modos:
+   La cámara muestra un **recuadro guía** de proporción **2400:1412**; al disparar se abre
+   el recorte con **Auto** ya seleccionado sobre esa zona.
+2. **Elige el modo de recorte** (tres modos):
+   - **Auto**: recorta a la zona del recuadro guía (o, en fotos de galería, a un
+     rectángulo centrado 2400:1412) y escala a **2400 × 1412 px**.
    - **Libre**: cada esquina se mueve por separado, ideal para papeles inclinados o con
      perspectiva fuerte.
    - **Rectángulo**: las cuatro esquinas se mueven manteniendo 90°, para fotos ya
      enderezadas o recortes rápidos.
+   *Omitir* deja la foto completa sin recortar.
 3. **Quita el fondo** automáticamente y te deja afinar con tres controles:
    - *Umbral*: cuánta oscuridad cuenta como tinta.
    - *Suavizado*: dureza del borde del trazo.
@@ -36,8 +37,8 @@ Código fuente en este repositorio; instrucciones para compilar más abajo.
 4. **Borrador**: pinta con el dedo para quitar manchas, sombras o trozos de papel.
    Con deshacer y restaurar.
 5. **Exporta**:
-   - PNG transparente → `Pictures/Trazo`. En capturas de cámara conserva los **2400 × 1412 px**
-     del recuadro guía (máximo 2400 px de lado en fotos de galería).
+   - PNG transparente → `Pictures/Trazo`. Con el modo **Auto** conserva los **2400 × 1412 px**;
+     con Libre/Rectángulo, hasta 2400 px de lado.
    - PDF A4 con fondo blanco → `Download/Trazo`.
    - Antes de guardar puedes **cambiar el nombre del archivo** (se limpia solo: quita
      caracteres inválidos y extensiones duplicadas).

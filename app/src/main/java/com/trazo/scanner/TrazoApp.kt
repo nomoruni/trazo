@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -61,9 +62,11 @@ fun TrazoApp(viewModel: TrazoViewModel) {
                 if (source != null) {
                     CropScreen(
                         bitmap = source,
+                        autoCorners = viewModel.autoCropCorners?.map { Offset(it.x, it.y) },
+                        startInAuto = viewModel.cropStartsWithAuto,
                         onCancel = viewModel::back,
-                        onApply = { corners ->
-                            viewModel.applyCrop(corners?.map { PointF(it.x, it.y) })
+                        onApply = { corners, auto ->
+                            viewModel.applyCrop(corners?.map { PointF(it.x, it.y) }, auto)
                         },
                     )
                 } else {

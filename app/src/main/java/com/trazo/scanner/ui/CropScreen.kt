@@ -63,7 +63,7 @@ private fun defaultCorners(): List<Offset> = listOf(
     Offset(0.04f, 0.96f),
 )
 
-private enum class CropMode { FREE, RECTANGLE }
+private enum class CropMode { AUTO, FREE, RECTANGLE }
 
 /** Tamaño mínimo del rectángulo, en fracción de la imagen. */
 private const val MIN_RECT_SIZE = 0.06f
@@ -158,11 +158,18 @@ private fun CropModeChip(selected: Boolean, label: String, onClick: () -> Unit) 
 @Composable
 fun CropScreen(
     bitmap: Bitmap,
+    autoCorners: List<Offset>?,
+    startInAuto: Boolean,
     onCancel: () -> Unit,
-    onApply: (List<Offset>?) -> Unit,
+    onApply: (List<Offset>?, Boolean) -> Unit,
 ) {
-    var corners by remember(bitmap) { mutableStateOf(defaultCorners()) }
-    var mode by remember(bitmap) { mutableStateOf(CropMode.FREE) }
+    val initialCorners = remember(bitmap, autoCorners) {
+        if (startInAuto && autoCorners != null) autoCorners else defaultCorners()
+    }
+    var corners by remember(bitmap) { mutableStateOf(initialCorners) }
+    var mode by remember(bitmap) {
+        mutableStateOf(if (startInAuto && autoCorners != null) CropMode.AUTO else CropMode.FREE)
+    }
     var activeCorner by remember { mutableStateOf(-1) }
 
     Column(
@@ -187,7 +194,10 @@ fun CropScreen(
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { corners = defaultCorners() }) {
+            IconButton(onClick = {
+                corners = if (mode == CropMode.AUTO) autoCorners ?: defaultCorners() else defaultCorners()
+                activeCorner = -1
+            }) {
                 Icon(Icons.Rounded.RestartAlt, contentDescription = null, tint = Color.White)
             }
         }
@@ -195,9 +205,21 @@ fun CropScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.Center,
         ) {
+            CropModeChip(
+                selected = mode == CropMode.AUTO,
+                label = stringResource(R.string.crop_mode_auto),
+                onClick = {
+                    if (mode != CropMode.AUTO) {
+                        corners = autoCorners ?: corners
+                        activeCorner = -1
+                    }
+                    mode = CropMode.AUTO
+                },
+            )
+            Spacer(Modifier.size(8.dp))
             CropModeChip(
                 selected = mode == CropMode.FREE,
                 label = stringResource(R.string.crop_mode_free),
@@ -227,6 +249,7 @@ fun CropScreen(
                     .pointerInput(bitmap) {
                         detectDragGestures(
                             onDragStart = { position ->
+                                if (mode == CropMode.AUTO) return@detectDragGestures
                                 val area = Size(size.width.toFloat(), size.height.toFloat())
                                 val rect = fitRect(bitmap.width, bitmap.height, area)
                                 val points = corners.map {
@@ -330,9 +353,14 @@ fun CropScreen(
                 )
 
                 points.forEachIndexed { index, point ->
-                    val radius = if (index == activeCorner) 14.dp.toPx() else 11.dp.toPx()
-                    drawCircle(Color.White, radius, point)
-                    drawCircle(Ink, radius, point, style = Stroke(width = 2.dp.toPx()))
+                    if (mode == CropMode.AUTO) {
+                        // En automático la zona es fija: no se muestran agarraderas.
+                        drawCircle(Color.White.copy(alpha = 0.85f), 5.dp.toPx(), point)
+                    } else {
+                        val radius = if (index == activeCorner) 14.dp.toPx() else 11.dp.toPx()
+                        drawCircle(Color.White, radius, point)
+                        drawCircle(Ink, radius, point, style = Stroke(width = 2.dp.toPx()))
+                    }
                 }
             }
         }
@@ -346,7 +374,11 @@ fun CropScreen(
         ) {
             Text(
                 text = stringResource(
-                    if (mode == CropMode.RECTANGLE) R.string.crop_hint_rect else R.string.crop_hint,
+                    when (mode) {
+                        CropMode.AUTO -> R.string.crop_hint_auto
+                        CropMode.RECTANGLE -> R.string.crop_hint_rect
+                        CropMode.FREE -> R.string.crop_hint
+                    },
                 ),
                 color = Color.White.copy(alpha = 0.75f),
                 style = MaterialTheme.typography.bodyMedium,
@@ -357,7 +389,7 @@ fun CropScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedButton(
-                    onClick = { onApply(null) },
+                    onClick = { onApply(null, false) },
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(stringResource(R.string.crop_skip))
@@ -365,7 +397,8 @@ fun CropScreen(
                 Button(
                     onClick = {
                         val clean = corners.map { Offset(it.x.coerceIn(0f, 1f), it.y.coerceIn(0f, 1f)) }
-                        onApply(if (polygonArea(clean) < 0.02f) null else clean)
+                        val valid = polygonArea(clean) >= 0.02f
+                        onApply(if (valid) clean else null, mode == CropMode.AUTO)
                     },
                     modifier = Modifier.weight(1f),
                 ) {

@@ -56,28 +56,6 @@ object ImageStore {
 
     // ---------------------------------------------------------------- lectura
 
-    /**
-     * Recorta la foto a la zona del recuadro guía y la escala al tamaño final
-     * (2400 × 1412). Devuelve `null` si el recorte no es válido.
-     */
-    fun cropToGuide(source: Bitmap, guide: CaptureGuide): Bitmap? {
-        val rect = guide.toImageRect(source.width, source.height)
-        if (rect.width() <= 0 || rect.height() <= 0) return null
-        val cropped = try {
-            Bitmap.createBitmap(source, rect.left, rect.top, rect.width(), rect.height())
-        } catch (t: Throwable) {
-            return null
-        }
-        val scaled = try {
-            Bitmap.createScaledBitmap(cropped, CAPTURE_WIDTH, CAPTURE_HEIGHT, true)
-        } catch (t: Throwable) {
-            cropped.recycle()
-            return null
-        }
-        if (scaled !== cropped) cropped.recycle()
-        return scaled
-    }
-
     fun decode(context: Context, uri: Uri, maxSide: Int = 2600): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         // Ojo: en modo inJustDecodeBounds decodeStream devuelve null siempre (solo rellena

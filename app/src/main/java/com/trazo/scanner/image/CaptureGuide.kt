@@ -1,5 +1,6 @@
 package com.trazo.scanner.image
 
+import android.graphics.PointF
 import android.graphics.Rect
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -78,4 +79,36 @@ fun CaptureGuide.toImageRect(imageWidth: Int, imageHeight: Int): Rect {
     val safeRight = x1.coerceIn(safeLeft + 1, imageWidth)
     val safeBottom = y1.coerceIn(safeTop + 1, imageHeight)
     return Rect(safeLeft, safeTop, safeRight, safeBottom)
+}
+
+/**
+ * Zona automática para fotos que no vienen de la cámara: el rectángulo centrado más
+ * grande posible con la proporción de la firma (2400:1412).
+ */
+fun centeredCropRect(imageWidth: Int, imageHeight: Int): Rect {
+    if (imageWidth <= 0 || imageHeight <= 0) return Rect()
+    val target = CAPTURE_WIDTH.toFloat() / CAPTURE_HEIGHT
+    val imageAspect = imageWidth.toFloat() / imageHeight
+    return if (imageAspect >= target) {
+        val width = (imageHeight * target).roundToInt().coerceIn(1, imageWidth)
+        val left = (imageWidth - width) / 2
+        Rect(left, 0, left + width, imageHeight)
+    } else {
+        val height = (imageWidth / target).roundToInt().coerceIn(1, imageHeight)
+        val top = (imageHeight - height) / 2
+        Rect(0, top, imageWidth, top + height)
+    }
+}
+
+/** Esquinas normalizadas (0..1) de [rect]: sup-izq, sup-der, inf-der, inf-izq. */
+fun rectToNormalizedCorners(rect: Rect, imageWidth: Int, imageHeight: Int): List<PointF> {
+    if (imageWidth <= 0 || imageHeight <= 0) return emptyList()
+    val w = imageWidth.toFloat()
+    val h = imageHeight.toFloat()
+    return listOf(
+        PointF(rect.left / w, rect.top / h),
+        PointF(rect.right / w, rect.top / h),
+        PointF(rect.right / w, rect.bottom / h),
+        PointF(rect.left / w, rect.bottom / h),
+    )
 }
