@@ -4,6 +4,18 @@ App Android para **escanear una firma y quedarse solo con el trazo**, eliminando
 El resultado es un **PNG con transparencia** (más PDF opcional) listo para pegar en un
 contrato, un correo o una imagen.
 
+## Descargar
+
+[**⬇️ Descargar la última APK**](https://github.com/nomoruni/trazo/releases/latest) · Android 7.0+ (API 24)
+
+Instala el `.apk` en el teléfono (permite "instalar apps desconocidas") o por USB:
+
+```bash
+adb install -r trazo-release.apk
+```
+
+Código fuente en este repositorio; instrucciones para compilar más abajo.
+
 ## Qué hace
 
 1. **Captura** con la cámara integrada (CameraX) o elige una foto de la galería.
