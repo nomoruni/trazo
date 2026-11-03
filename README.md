@@ -36,7 +36,8 @@ Código fuente en este repositorio; instrucciones para compilar más abajo.
 4. **Borrador**: pinta con el dedo para quitar manchas, sombras o trozos de papel.
    Con deshacer y restaurar.
 5. **Exporta**:
-   - PNG transparente → `Pictures/Trazo`.
+   - PNG transparente → `Pictures/Trazo`. En capturas de cámara conserva los **2400 × 1412 px**
+     del recuadro guía (máximo 2400 px de lado en fotos de galería).
    - PDF A4 con fondo blanco → `Download/Trazo`.
    - Compartir directamente (WhatsApp, correo, Drive…).
 

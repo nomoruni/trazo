@@ -159,7 +159,7 @@ class SignatureProcessor private constructor(
     }
 
     companion object {
-        const val DEFAULT_MAX_SIDE = 1600
+        const val DEFAULT_MAX_SIDE = 2400
 
         fun create(bitmap: Bitmap, maxSide: Int = DEFAULT_MAX_SIDE): SignatureProcessor {
             val scaled = scaleToFit(bitmap, maxSide)
